@@ -23,6 +23,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <set>
+#include <vector>
 using namespace std;
 
 #define URL_MAX_SIZE 64
@@ -256,8 +257,36 @@ bool HandleOverflowedPartition() {
   }
   return true;
 }
+void TopKOfAMap(
+    map<string, int> *mymap,
+    priority_queue<pair<string, int>, vector<pair<string, int>>, cmp> *topk) {
+  map<string, int>::iterator iter;
+  int i = 0;
+  for (iter = mymap->begin(); i < TOPK && iter != mymap->end(); ++iter, ++i) {
+    topk->push(*iter);
+  }
+  // mymap.size > TOPK
+  for (; iter != mymap->end(); ++iter) {
+    if (iter->second > topk->top().second) {
+      topk->pop();
+      topk->push(*iter);
+    }
+  }
+}
+void MergeTopK(priority_queue<pair<string, int>, vector<pair<string, int>>,
+                              cmp> *global_topk,
+               priority_queue<pair<string, int>, vector<pair<string, int>>,
+                              cmp> *partical_topk) {
+  while (!partical_topk->empty()) {
+    global_topk->push(partical_topk->top());
+    partical_topk->pop();
+  }
+  while (global_topk->size() > TOPK) {
+    global_topk->pop();
+  }
+}
 
-bool Reduce() {
+bool ReduceAllPartition() {
   map<string, int> url_count;
   map<string, int>::iterator iter;
   stringstream sstr;
@@ -269,6 +298,10 @@ bool Reduce() {
     fout.close();
     return false;
   }
+  priority_queue<pair<string, int>, vector<pair<string, int>>, cmp> global_topk,
+      partical_topk;
+  // reduce each partition to get a partical topk, and merge with the global
+  // topk.
   for (int file_id = 0; file_id < tmp_file_num; ++file_id) {
     sstr.str("");
     sstr << "./tmp/partition" << file_id;
@@ -282,37 +315,18 @@ bool Reduce() {
       url_count[url] += count;
     }
     fin.close();
+    TopKOfAMap(&url_count, &partical_topk);
+    MergeTopK(&global_topk, &partical_topk);
+    url_count.clear();
+    while (!partical_topk.empty()) {
+      partical_topk.pop();
+    }
   }
-#if DEBUG
-  cout << "--------top " << TOPK << "----------" << endl;
-#endif
-  if (url_count.size() <= TOPK) {
-    priority_queue<pair<string, int>, vector<pair<string, int>>, cmp> topk(
-        url_count.begin(), url_count.end());
-
-    while (!topk.empty()) {
-      //  cout << topk.top().first << " -> " << topk.top().second << endl;
-      fout << topk.top().first << " -> " << topk.top().second << endl;
-      topk.pop();
-    }
-  } else {
-    iter = url_count.begin();
-    for (int i = 0; i < TOPK; ++i) {
-      ++iter;
-    }
-    priority_queue<pair<string, int>, vector<pair<string, int>>, cmp> topk(
-        url_count.begin(), iter);
-    for (; iter != url_count.end(); ++iter) {
-      if (iter->second > topk.top().second) {
-        topk.pop();
-        topk.push(*iter);
-      }
-    }
-    while (!topk.empty()) {
-      // cout << topk.top().first << " -> " << topk.top().second << endl;
-      fout << topk.top().first << " -> " << topk.top().second << endl;
-      topk.pop();
-    }
+  // write global topk to the output.txt
+  while (!global_topk.empty()) {
+    fout << global_topk.top().first << " -> " << global_topk.top().second
+         << endl;
+    global_topk.pop();
   }
   fout.close();
   return true;
@@ -325,11 +339,11 @@ int main() {
   GenData(10);
   // partition data into small parts
   PartitionRawData();
-  // partitioned data may overflow
+  // partitioned data that exceeds the limit
   HandleOverflowedPartition();
   // count top K for each partition
-  Reduce();
+  ReduceAllPartition();
   // sleep(10000);
-  // RmFile("./tmp");
+  RmFile("./tmp");
   return 0;
 }
