@@ -1,0 +1,11 @@
+Debug/*
+output.txt
+data_set.txt
+tmp/*
+.project
+.cproject
+*.o
+*.out
+*.so
+*.a
+*.swp
