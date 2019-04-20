@@ -1,6 +1,6 @@
 Debug/*
-output.txt
-data_set.txt
+output*
+data_set*
 tmp/*
 .project
 .cproject

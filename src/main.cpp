@@ -27,12 +27,16 @@
 using namespace std;
 
 #define URL_MAX_SIZE 64
-#define TOPK 100
-int MOD = 1e9 + 7;
-int tmp_file_num = 0;
-#define FILE_SIZE 128  // 100 * 1024 * 1024  // 100 MB
-set<string> overflow_partition_file;
+#define MAX_FILE_NUM 10000
+#define FILE_SIZE 256  //(100 * 1024 * 1024)  // 100 MB
 
+uint64_t MOD = (1e9 + 7);
+int TmpFileNum = 0;
+set<string> OverflowedPartitionFile;
+
+uint64_t TopK = 100;
+uint64_t UniqueUrl = 111;
+uint32_t SizeGB = 1;
 // typedef unsigned long long uint64_t;
 string data_set_file = "data_set.txt";
 
@@ -86,8 +90,8 @@ bool GenData(uint64_t size_gb) {
   assert(size_gb <= 500);
   string url;
   stringstream sstr;
-  int random_num = 0;
-  uint64_t size = (size_gb << 10), temp = 0;
+  uint64_t random_num = 0;
+  uint64_t size = (size_gb << 30), temp = 0;
   ofstream file(data_set_file.c_str());
   if (file.fail()) {
     cout << "error: falied to open the file data_set.txt";
@@ -95,7 +99,7 @@ bool GenData(uint64_t size_gb) {
     return false;
   }
   while (temp < size) {
-    random_num = rand() % 100;
+    random_num = rand() % UniqueUrl;
     sstr << random_num;
     url = "https://github.com/fzhedu/" + sstr.str();
     file << url << endl;
@@ -103,6 +107,7 @@ bool GenData(uint64_t size_gb) {
     sstr.str("");
   }
   file.close();
+  cout << size_gb << " GB data is generated successfully!" << endl;
   return true;
 }
 
@@ -113,7 +118,7 @@ struct cmp {
     return false;
   }
 };
-uint64_t HashStr(string str, int seed) {
+uint64_t HashStr(string str, uint64_t seed) {
   int length = str.size();
   uint64_t temp = ((uint64_t)str[0]) % MOD;
   for (int i = 1; i < length; i++) {
@@ -128,10 +133,11 @@ uint64_t FileSize(const char *filename) {
 }
 unsigned GetPartitionNum(const char *filename) {
   uint64_t size = FileSize(filename);
-  return size / FILE_SIZE * 2 + 11;
+  size = size / FILE_SIZE * 2 + 11;
+  return size > MAX_FILE_NUM ? MAX_FILE_NUM : size;
 }
 // approximate size of a map
-unsigned GetMapSize(map<string, int> *mmap) {
+unsigned GetMapSize(map<string, uint64_t> *mmap) {
   return sizeof(*mmap) + mmap->size() * URL_MAX_SIZE;
 }
 /*
@@ -139,15 +145,17 @@ unsigned GetMapSize(map<string, int> *mmap) {
  * partition file. Note the seed is different in each calling so that the
  * over-sized file can be split into many smaller files.
  */
-bool WritePartition(map<string, int> *url_count, int par_num, int seed) {
-  map<string, int>::iterator iter;
-  vector<pair<string, int>> bucket[par_num];
+bool WritePartition(map<string, uint64_t> *url_count, uint64_t par_num,
+                    uint64_t seed) {
+  map<string, uint64_t>::iterator iter;
+  vector<pair<string, uint64_t>> bucket[par_num];
   int hash_value = 0;
   // hash partition the data from the map
   for (iter = url_count->begin(); iter != url_count->end(); iter++) {
     hash_value = HashStr(iter->first, seed) % par_num;
-    bucket[hash_value].push_back(pair<string, int>(iter->first, iter->second));
-#if DEGUG
+    bucket[hash_value].push_back(
+        pair<string, uint64_t>(iter->first, iter->second));
+#if DEBUG_INFO
     cout << iter->first << " -> " << iter->second << " hash = " << hash_value
          << endl;
 #endif
@@ -157,7 +165,7 @@ bool WritePartition(map<string, int> *url_count, int par_num, int seed) {
   for (int par_id = 0; par_id < par_num; ++par_id) {
     if (bucket[par_id].size() > 0) {
       sstr.str("");
-      sstr << "./tmp/partition" << (tmp_file_num + par_id);
+      sstr << "./tmp/partition" << (TmpFileNum + par_id);
       // write to a paritition file
       ofstream fout(sstr.str(), ios::app);
       if (fout.fail()) {
@@ -167,7 +175,7 @@ bool WritePartition(map<string, int> *url_count, int par_num, int seed) {
       }
       // if the partition file is too large, then it has to be repartitioned
       if (FileSize(sstr.str().c_str()) > FILE_SIZE) {
-        overflow_partition_file.insert(sstr.str());
+        OverflowedPartitionFile.insert(sstr.str());
       }
       for (unsigned j = 0; j < bucket[par_id].size(); ++j) {
         fout << bucket[par_id][j].first << " " << bucket[par_id][j].second
@@ -193,15 +201,19 @@ bool PartitionRawData() {
     return false;
   }
   char url[URL_MAX_SIZE];
-  int par_num = GetPartitionNum(data_set_file.c_str()),
-      seed = tmp_file_num + 111;
-  map<string, int> url_count;
+  uint64_t par_num = GetPartitionNum(data_set_file.c_str()),
+           seed = TmpFileNum + 111;
+  map<string, uint64_t> url_count;
   while (file.getline(url, URL_MAX_SIZE)) {
     url_count[url]++;
 
     if (GetMapSize(&url_count) > FILE_SIZE) {  // exceed the limit
       WritePartition(&url_count, par_num, seed);
       url_count.clear();
+#if DEBUG_INFO
+      cout << "Early terminated in debug" << endl;
+      break;
+#endif
     }
   }
   file.close();
@@ -210,7 +222,7 @@ bool PartitionRawData() {
     WritePartition(&url_count, par_num, seed);
     url_count.clear();
   }
-  tmp_file_num += par_num;
+  TmpFileNum += par_num;
   return true;
 }
 /*
@@ -220,10 +232,10 @@ bool PartitionRawData() {
  * data format: "url count" per line
  */
 bool Repartition(const char *filename) {
-  map<string, int> url_count;
+  map<string, uint64_t> url_count;
   string url;
-  int count;
-  int par_num = GetPartitionNum(filename), seed = tmp_file_num + 111;
+  uint64_t count;
+  uint64_t par_num = GetPartitionNum(filename), seed = TmpFileNum + 111;
   ifstream fin(filename, ios::in);
   if (fin.fail()) {
     fin.close();
@@ -244,25 +256,25 @@ bool Repartition(const char *filename) {
     WritePartition(&url_count, par_num, seed);
     url_count.clear();
   }
-  tmp_file_num += par_num;
+  TmpFileNum += par_num;
   // remove the over-sized partition file
   RmFile(filename);
   return true;
 }
 bool HandleOverflowedPartition() {
-  while (!overflow_partition_file.empty()) {
-    string filename = *(overflow_partition_file.begin());
+  while (!OverflowedPartitionFile.empty()) {
+    string filename = *(OverflowedPartitionFile.begin());
     Repartition(filename.c_str());
-    overflow_partition_file.erase(overflow_partition_file.begin());
+    OverflowedPartitionFile.erase(OverflowedPartitionFile.begin());
   }
   return true;
 }
-void TopKOfAMap(
-    map<string, int> *mymap,
-    priority_queue<pair<string, int>, vector<pair<string, int>>, cmp> *topk) {
-  map<string, int>::iterator iter;
+void TopKOfAMap(map<string, uint64_t> *mymap,
+                priority_queue<pair<string, uint64_t>,
+                               vector<pair<string, uint64_t>>, cmp> *topk) {
+  map<string, uint64_t>::iterator iter;
   int i = 0;
-  for (iter = mymap->begin(); i < TOPK && iter != mymap->end(); ++iter, ++i) {
+  for (iter = mymap->begin(); i < TopK && iter != mymap->end(); ++iter, ++i) {
     topk->push(*iter);
   }
   // mymap.size > TOPK
@@ -273,36 +285,37 @@ void TopKOfAMap(
     }
   }
 }
-void MergeTopK(priority_queue<pair<string, int>, vector<pair<string, int>>,
-                              cmp> *global_topk,
-               priority_queue<pair<string, int>, vector<pair<string, int>>,
-                              cmp> *partical_topk) {
+void MergeTopK(
+    priority_queue<pair<string, uint64_t>, vector<pair<string, uint64_t>>,
+                   cmp> *global_topk,
+    priority_queue<pair<string, uint64_t>, vector<pair<string, uint64_t>>,
+                   cmp> *partical_topk) {
   while (!partical_topk->empty()) {
     global_topk->push(partical_topk->top());
     partical_topk->pop();
   }
-  while (global_topk->size() > TOPK) {
+  while (global_topk->size() > TopK) {
     global_topk->pop();
   }
 }
 
 bool ReduceAllPartition() {
-  map<string, int> url_count;
-  map<string, int>::iterator iter;
+  map<string, uint64_t> url_count;
+  map<string, uint64_t>::iterator iter;
   stringstream sstr;
   string url;
-  int count;
+  uint64_t count;
   ofstream fout("output.txt", ios::out);
   if (fout.fail()) {
     cout << "error: create output file failed!" << endl;
     fout.close();
     return false;
   }
-  priority_queue<pair<string, int>, vector<pair<string, int>>, cmp> global_topk,
-      partical_topk;
+  priority_queue<pair<string, uint64_t>, vector<pair<string, uint64_t>>, cmp>
+      global_topk, partical_topk;
   // reduce each partition to get a partical topk, and merge with the global
   // topk.
-  for (int file_id = 0; file_id < tmp_file_num; ++file_id) {
+  for (int file_id = 0; file_id < TmpFileNum; ++file_id) {
     sstr.str("");
     sstr << "./tmp/partition" << file_id;
     ifstream fin(sstr.str().c_str(), ios::in);
@@ -335,14 +348,17 @@ bool ReduceAllPartition() {
 int main() {
   MkDir("./tmp");
   assert(FILE_SIZE > 127);
-  overflow_partition_file.clear();
-  GenData(10);
+  OverflowedPartitionFile.clear();
+  //  GenData(SizeGB);
   // partition data into small parts
   PartitionRawData();
+  cout << "Partition raw data is ok" << endl;
   // partitioned data that exceeds the limit
   HandleOverflowedPartition();
+  cout << "Overflowed Partitions are handled" << endl;
   // count top K for each partition
   ReduceAllPartition();
+  cout << "Reduce ok" << endl;
   // sleep(10000);
   RmFile("./tmp");
   return 0;
