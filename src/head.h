@@ -23,7 +23,7 @@ using namespace std;
 
 #define URL_MAX_SIZE 64
 #define MAX_FILE_NUM 100000
-#define FILE_SIZE (800 * 1024 * 1024)  //  800MB
+#define FILE_SIZE (700 * 1024 * 1024)  // 700MB
 
 uint64_t MOD = (1e9 + 7);
 int TmpFileNum = 0;
@@ -98,7 +98,7 @@ void MkDir(const char *dir) {
       cout << "make errorly" << endl;
     }
   } else {
-    assert("Please delete the tmp dir first");
+    assert(false && "Please delete the tmp dir first");
   }
 }
 void Getfilepath(const char *path, const char *filename, char *filepath) {
