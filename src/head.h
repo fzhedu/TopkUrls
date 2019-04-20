@@ -97,6 +97,8 @@ void MkDir(const char *dir) {
     } else {
       cout << "make errorly" << endl;
     }
+  } else {
+    assert("Please delete the tmp dir first");
   }
 }
 void Getfilepath(const char *path, const char *filename, char *filepath) {
