@@ -34,16 +34,15 @@ and merge each partial top K to the global Top K.
 
 ### Run
 1. make
-
 `make`
+
 2. generate data
-
 `./gen.out S U`
+
 3. run topk
-
 `time ./topk.out S U T`
-4. check(if the urls are not too large)
 
+4. check(if the urls are not too large)
 `time ./check.out S U T`
 
 NOTE: S, U and T are three positive integers, which mean the Size of URL files, the max number of Unique urls and the target Topk
