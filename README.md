@@ -50,5 +50,7 @@ NOTE: S, U and T are three positive integers, which mean the Size of URL files, 
 
 ### TODO
 The current just uses one thead, but I have to attend a conference now. I can optimize the codes in following two aspects.
-1. Use multi-threads
-2. Optimize accessing I/O
+1. Use multi-threads: 
+Pay attention to synchroniztion when accessing file in the Map and Partition, Repartition step.
+2. Optimize accessing I/O: 
+Reduce accessing times and prefer accessing a batch of data.
