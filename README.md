@@ -4,18 +4,18 @@
 Find the top K (100) of the most occurrences of urls from a S (100) GB URL file, note the memory size is limited to 1 GB.
 
 ### Solution:
-* case 1: the total unique urls can reside into memory.
+* case 1: the total unique urls can reside in memory.
 
 Calculate top K in memory directly.
 
-* case 2: the total unique urls cannot reside into memory.
+* case 2: the total unique urls cannot reside in memory.
 
-Partition the raw files into many smaller files whose size is not large than FILE_SIZE. 
+Partition the raw URL files into many smaller files whose size is not large than FILE_SIZE. 
 The FILE_SIZE is smaller than 1 GB so that each partition files can calculate top K in memory.
 
 NOTE:
 
-1. It is optimal to partially calculate top K when reading a file in the disk. 
+1. It is optimal to partially calculate top K when reading a file from the disk. 
 2. The partition files from the raw URL files may execeed FILE_SIZE, so they need to be repartitioned. 
 
 ### Implementation
@@ -24,8 +24,7 @@ NOTE:
 2. Use a prioritity queue to get TOP k from the map.
 
 * for case 2:
-1. Map and Parition: Use a map to count the occurrence of urls from the raw URL file. If the memory size of the map exceed (FILE_SIZE/2), 
-then data in the map are partition and each partitioned data is flashed to a file.
+1. Map and Parition: Use a map to count the occurrence of urls from the raw URL file. If the memory size of the map exceed (FILE_SIZE/2), then data in the map are partition and each partitioned data is flushed to a file.
 2. Repartition: The partition files in step 1 may execeed FILE_SIZE, so they need to be repartitioned. After repartition, 
 the size of some new partition files may also execeed FILE_SIZE, so this step continues until all partition files are small 
 enough to reside in limited memory.
