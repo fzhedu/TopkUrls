@@ -43,6 +43,8 @@ and merge each partial top K to the global Top K.
 
 4. check(if the urls are not too large)
 `time ./check.out S U T`
+`diff output.txtSXXUXX output.txtSXXUXX_check`
+(the two files may differ due to the disorder of urls with euqal occurrences, but the results are correct.)
 
 NOTE: S, U and T are three positive integers, which mean the Size of URL files, the max number of Unique urls and the target Topk
 , respectively. (0 < S < 500, 0 < U < max of uint32, 0 < T < 10000)
