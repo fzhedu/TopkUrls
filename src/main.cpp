@@ -69,16 +69,16 @@ bool WritePartition(map<string, uint64_t> *url_count, uint64_t par_num,
  * First, the raw data is reduced using a map to get partial results, then the
  * reduced data are written to partition files on the disk. Due to the
  * limit memory, if the memory footprint of the map  exceed the limit size, i.e,
- * FILE_SIZE, then the map should be flashed to the disk.
+ * FILE_SIZE, then the map should be flushed to the disk.
  * NOTE: a special case where the urls are so less that can reside the memory,
- * then the urls do not need to be flashed to parition files, but directly
+ * then the urls do not need to be flushed to parition files, but directly
  * output the results.
  */
 uint8_t PartitionRawData() {
   stringstream sstr;
   sstr << "S" << SizeGB << "U" << UniqueUrl;
   data_set_file = data_set_file + sstr.str();
-  uint8_t flashed = 0;
+  uint8_t flushed = 0;
   ifstream file(data_set_file.c_str());
   if (file.fail()) {
     cout << "error: failed to open the file " << data_set_file.c_str() << endl;
@@ -92,15 +92,15 @@ uint8_t PartitionRawData() {
   // read raw data and partially reduce the occurrence of urls
   while (file.getline(url, URL_MAX_SIZE)) {
     url_count[url]++;
-    // the map size exceeds the limit, then the map is flashed
+    // the map size exceeds the limit, then the map is flushed
     if (GetMapSize(&url_count) > FILE_SIZE / 2) {
       WritePartition(&url_count, par_num, seed);
       url_count.clear();
-      flashed = 1;
+      flushed = 1;
     }
   }
   file.close();
-  if (flashed) {
+  if (flushed) {
     // partition the remaining data in the map
     if (!url_count.empty()) {
       WritePartition(&url_count, par_num, seed);
